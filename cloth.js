@@ -1,10 +1,13 @@
 const unit = Math.min(window.innerWidth, window.innerHeight) / 12.5;
 const CONFIG = {
-    dampen: 0.9,
-    stiffness: 5,
+    mouseDragForce: 1,
+    dampen: 0.99,
+    stiffness: 6.5,
     nodeCount: 11,
     nodeDist: unit,
-    nodeSize: 5
+    nodeSize: 5,
+    gravity: 20,
+    deltaTime: 0.1
 };
 
 class Node {
@@ -13,12 +16,24 @@ class Node {
         this.x = x;
         this.y = y;
         this.locked = locked;
+
+        this.vx = 0;
+        this.vy = 0;
     }
 
-    velocity(vx, vy) {
+    addVel(vx, vy) {
+        this.vx += vx;
+        this.vy += vy;
+    }
+
+    updatePos() {
         if (!this.locked) {
-            this.x += vx;
-            this.y += vy;
+            this.x += this.vx * CONFIG.deltaTime;
+            this.y += this.vy * CONFIG.deltaTime;
+
+            const decay = Math.exp(-CONFIG.deltaTime * CONFIG.dampen);
+            this.vx *= decay;
+            this.vy *= decay;
         }
     }
 }
@@ -65,21 +80,20 @@ function updateCanvas() {
         for (var j = 0; j < CONFIG.nodeCount; j++) {
             const node = nodes[i][j];
 
-            let [vx, vy] = [0, 0];
-            vy += 5;
+            let [fx, fy] = [0, 0];
+            fy += CONFIG.gravity;
             mapNeighbor(i, j, other => {
                 const [dx, dy] = [other.x - node.x, other.y - node.y];
                 const magnitude = norm(dx, dy) - CONFIG.nodeDist;
-
-                let [ux, uy] = normalize(dx, dy);
-                ux *= magnitude;
-                uy *= magnitude;
-
-                vx += ux * CONFIG.stiffness;
-                vy += uy * CONFIG.stiffness;
+                let [dfx, dfy] = normalize(dx, dy);
+                dfx *= magnitude * CONFIG.stiffness;
+                dfy *= magnitude * CONFIG.stiffness;
+                fx += dfx;
+                fy += dfy;
             });
 
-            node.velocity(vx * 0.1, vy * 0.1);
+            node.addVel(fx * CONFIG.deltaTime, fy * CONFIG.deltaTime);
+            node.updatePos();
 
             if (i !== CONFIG.nodeCount - 1) {
                 drawLine(node, nodes[i + 1][j]);
@@ -117,6 +131,22 @@ function updateCanvas() {
         }
         nodes.push(row);
     }
+
+    let [prevX, prevY] = [midX, midY];
+    canvas.addEventListener('mousemove', e => {
+        const [currX, currY] = [
+            e.pageX - canvas.offsetLeft,
+            e.pageY - canvas.offsetTop
+        ];
+        const [dirX, dirY] = [currX - prevX, currY - prevY];
+        [prevX, prevY] = [currX, currY];
+
+        for (var i = 0; i < CONFIG.nodeCount; i++) {
+            for (var j = 0; j < CONFIG.nodeCount; j++) {
+                nodes[i][j].addVel(dirX, dirY);
+            }
+        }
+    });
 
     setInterval(updateCanvas, 10);
 })();
